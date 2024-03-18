@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSA Encryption/Decryption</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: lightblue;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+
+        .step-section {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 10px;
+            width: 50%;
+        }
+
+        input {
+            margin-bottom: 10px;
+            width: calc(100% - 20px);
+        }
+
+        button {
+            margin-top: 10px;
+        }
+
+        h1, h2, h3 {
+            color: navy;
+            width: 100%;
+            text-align: center;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            max-width: 100%;
+            overflow: auto;
+        }
+
+        #decrypted-text {
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>RSA Key Pairs Generation and Encryption/Decryption</h1>
+
+    <div id="keypair-section" class="step-section">
+        <h2>Step 1: Generate RSA Keypair</h2>
+        <label for="p">Enter prime number p: </label>
+        <input type="text" id="p" required><br>
+
+        <label for="q">Enter prime number q: </label>
+        <input type="text" id="q" required><br>
+
+        <label for="e">Enter public exponent e: </label>
+        <input type="text" id="e" required><br>
+
+        <button onclick="generateKeypair()">Generate Keypair</button>
+    </div>
+
+    <div id="result-section" class="step-section" style="display: none;">
+        <h2>Generated Keys</h2>
+        <p>Public Key (Kpub):</p>
+        <pre id="public-key"></pre>
+
+        <p>Private Key (Kpr):</p>
+        <pre id="private-key"></pre>
+    </div>
+
+    <div id="encryption-section" class="step-section" style="display: none;">
+        <h2>Step 2: Encrypt Text</h2>
+        <label for="plaintext">Enter text to encrypt: </label>
+        <input type="text" id="plaintext" maxlength="4" required><br>
+
+        <button onclick="encryptText()">Encrypt</button>
+
+        <div id="encrypted-text" style="display: none;">
+            <h3>Encrypted Text:</h3>
+            <pre id="encrypted-result"></pre>
+        </div>
+    </div>
+
+    <div id="decryption-section" class="step-section" style="display: none;">
+        <h2>Step 3: Decrypt Text</h2>
+        <label for="ciphertext">Enter ciphertext to decrypt: </label>
+        <input type="text" id="ciphertext" maxlength="512" required><br>
+
+        <button onclick="decryptText()">Decrypt</button>
+
+        <div id="decrypted-text" style="display: none;">
+            <h3>Decrypted Text:</h3>
+            <pre id="decrypted-result"></pre>
+        </div>
+    </div>
+
+    <script>
+        async function generate_rsa_keys(p, q, e) {
+            const n = p * q;
+            const phi = (p - 1) * (q - 1);
+
+            const algorithm = { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' };
+
+            const keypair = await crypto.subtle.generateKey(algorithm, true, ['encrypt', 'decrypt']);
+
+            const publicKey = await crypto.subtle.exportKey('spki', keypair.publicKey);
+            const privateKey = await crypto.subtle.exportKey('pkcs8', keypair.privateKey);
+
+            return { private_key: encodeBase64(privateKey), public_key: encodeBase64(publicKey) };
+        }
+
+        function encrypt_text(public_key, plaintext) {
+            return crypto.subtle.importKey('spki', decodeBase64(public_key), { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt'])
+                .then((public_key_obj) => {
+                    return crypto.subtle.encrypt({ name: 'RSA-OAEP' }, public_key_obj, new TextEncoder().encode(plaintext))
+                        .then(ciphertext => arrayBufferToHex(ciphertext));
+                });
+        }
+
+        function decrypt_text(private_key, ciphertext) {
+            return crypto.subtle.importKey('pkcs8', decodeBase64(private_key), { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['decrypt'])
+                .then((private_key_obj) => {
+                    return crypto.subtle.decrypt({ name: 'RSA-OAEP' }, private_key_obj, hexToArrayBuffer(ciphertext))
+                        .then(decryptedArray => new TextDecoder().decode(decryptedArray));
+                });
+        }
+
+        function encodeBase64(arrayBuffer) {
+            return btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)));
+        }
+
+        function decodeBase64(base64String) {
+            const binaryString = atob(base64String);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function arrayBufferToHex(buffer) {
+            const hexArray = Array.from(new Uint8Array(buffer), byte => byte.toString(16).padStart(2, '0'));
+            return hexArray.join('');
+        }
+
+        function hexToArrayBuffer(hexString) {
+            const bytes = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+            return bytes.buffer;
+        }
+
+        function generateKeypair() {
+            const p = parseInt(document.getElementById('p').value);
+            const q = parseInt(document.getElementById('q').value);
+            const e = parseInt(document.getElementById('e').value);
+
+            generate_rsa_keys(p, q, e).then(({ private_key, public_key }) => {
+                document.getElementById('public-key').innerText = public_key;
+                document.getElementById('private-key').innerText = private_key;
+
+                document.getElementById('keypair-section').style.display = 'none';
+                document.getElementById('result-section').style.display = 'block';
+                document.getElementById('encryption-section').style.display = 'block';
+            });
+        }
+
+        function encryptText() {
+            const plaintext = document.getElementById('plaintext').value;
+            const publicKey = document.getElementById('public-key').innerText;
+
+            encrypt_text(publicKey, plaintext).then(ciphertext => {
+                document.getElementById('encrypted-result').innerText = ciphertext;
+                document.getElementById('encrypted-text').style.display = 'block';
+                document.getElementById('decryption-section').style.display = 'block';
+            });
+        }
+
+        function decryptText() {
+            const ciphertext = document.getElementById('ciphertext').value;
+            const privateKey = document.getElementById('private-key').innerText;
+
+            decrypt_text(privateKey, ciphertext).then(decryptedText => {
+                document.getElementById('decrypted-result').innerText = decryptedText;
+                document.getElementById('decrypted-text').style.display = 'block';
+            });
+        }
+    </script>
+
+</body>
+
+</html>
